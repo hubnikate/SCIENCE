@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Philippine Tectonic Fault & Seismic Activity Map</title>
+
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#111827', 950: '#030712' },
+                        crimson: '#f43f5e',
+                        trench: '#0284c7',
+                        fault: '#f97316'
+                    }
+                }
+            }
+        }
+    </script>
+
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+       
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+
+        /* Glassmorphism UI Effects */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+
+        /* Custom Pulse Marker Animation */
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.33);
+                opacity: 1;
+            }
+            80%, 100% {
+                transform: scale(2.2);
+                opacity: 0;
+            }
+        }
+
+
+        .pulsing-quake-marker {
+            position: relative;
+        }
+
+
+        .pulsing-quake-marker::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            border-radius: 50%;
+            background-color: currentColor;
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            z-index: -1;
+        }
+
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.8);
+        }
+
+
+        /* Leaflet Map Specific Styling */
+        .leaflet-popup-content-wrapper {
+            background: rgba(15, 23, 42, 0.95);
+            color: #f8fafc;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            padding: 4px;
+        }
+        .leaflet-popup-tip {
+            background: rgba(15, 23, 42, 0.95);
+        }
+        .leaflet-container {
+            background-color: #030712 !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased select-none">
+
+
+    <header class="glass-panel border-b border-slate-800 px-4 py-3 z-30 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-rose-500/20 text-rose-400 rounded-lg border border-rose-500/30">
+                <i class="fa-solid me-0.5 fa-globe fa-lg"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-slate-100 leading-tight tracking-wide flex items-center gap-2">
+                    Philippine Tectonic Fault & Seismic Map
+                    <span class="text-xs bg-rose-500/20 text-rose-300 font-medium px-2 py-0.5 rounded-full border border-rose-500/30">GIS Calibrated</span>
+                </h1>
+                <p class="text-xs text-slate-400">Exact Terrain Relief Satellite Base Overlay & Subduction Zone Analysis</p>
+            </div>
+        </div>
+
+
+        <!-- Navigation Tabs -->
+        <div class="flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+            <button id="tab-map-btn" onclick="switchView('map')" class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 bg-rose-600 text-white shadow-md flex items-center gap-2">
+                <i class="fa-solid fa-map"></i> Map Explorer
+            </button>
+            <button id="tab-presentation-btn" onclick="switchView('presentation')" class="px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all duration-200 flex items-center gap-2">
+                <i class="fa-solid fa-chalkboard-user"></i> Challenge Presentation
+            </button>
+            <button id="tab-code-btn" onclick="switchView('code')" class="px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all duration-200 flex items-center gap-2">
+                <i class="fa-solid fa-code"></i> Source Code
+            </button>
+        </div>
+    </header>
+
+
+    <main class="flex-1 relative overflow-hidden flex flex-col md:flex-row">
+       
+        <!-- ================= VIEW 1: INTERACTIVE MAP ================= -->
+        <div id="view-map" class="w-full h-full relative flex flex-col md:flex-row">
+           
+            <!-- Map Container -->
+            <div id="map" class="w-full h-full z-10 flex-1 min-h-[450px]"></div>
+
+
+            <div class="absolute top-4 right-4 z-20 w-80 max-w-[calc(100vw-2rem)] flex flex-col gap-3">
+               
+                <!-- Layers & Toggles Control -->
+                <div class="glass-panel p-4 rounded-xl shadow-2xl transition-all">
+                    <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-700/60">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                            <i class="fa-solid fa-layer-group text-sky-400"></i> Map Layer Controls
+                        </h2>
+                        <button onclick="resetMapView()" class="text-[11px] text-sky-400 hover:text-sky-300 transition flex items-center gap-1">
+                            <i class="fa-solid fa-rotate"></i> Reset Zoom
+                        </button>
+                    </div>
+
+
+                    <div class="space-y-2.5 text-xs">
+                        <!-- Satellite Relief Image Toggle -->
+                        <label class="flex items-center justify-between p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 cursor-pointer border border-slate-700/40 transition">
+                            <span class="flex items-center gap-2 text-slate-200 font-medium">
+                                <i class="fa-solid fa-image text-emerald-400"></i> Terrain Satellite Overlay
+                            </span>
+                            <input type="checkbox" id="toggle-satellite" checked onchange="toggleSatelliteOverlay()" class="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 bg-slate-900 border-slate-700">
+                        </label>
+
+
+                        <!-- Fault Lines Toggle -->
+                        <label class="flex items-center justify-between p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 cursor-pointer border border-slate-700/40 transition">
+                            <span class="flex items-center gap-2 text-slate-200 font-medium">
+                                <span class="w-3 h-1 bg-red-500 rounded-full inline-block"></span> Fault Lines (PFZ & WVF)
+                            </span>
+                            <input type="checkbox" id="toggle-faults" checked onchange="toggleFaultsLayer()" class="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 bg-slate-900 border-slate-700">
+                        </label>
+
+
+                        <!-- Trenches Toggle -->
+                        <label class="flex items-center justify-between p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 cursor-pointer border border-slate-700/40 transition">
+                            <span class="flex items-center gap-2 text-slate-200 font-medium">
+                                <span class="w-3 h-1 bg-sky-400 rounded-full inline-block"></span> Subduction Trenches
+                            </span>
+                            <input type="checkbox" id="toggle-trenches" checked onchange="toggleTrenchesLayer()" class="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 bg-slate-900 border-slate-700">
+                        </label>
+
+
+                        <!-- Earthquake Nodes Toggle -->
+                        <label class="flex items-center justify-between p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 cursor-pointer border border-slate-700/40 transition">
+                            <span class="flex items-center gap-2 text-slate-200 font-medium">
+                                <i class="fa-solid fa-house-crack text-rose-400"></i> Major Earthquakes (M6.0+)
+                            </span>
+                            <input type="checkbox" id="toggle-quakes" checked onchange="toggleQuakesLayer()" class="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 bg-slate-900 border-slate-700">
+                        </label>
+
+
+                        <!-- Pulse Animations Toggle -->
+                        <label class="flex items-center justify-between p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 cursor-pointer border border-slate-700/40 transition">
+                            <span class="flex items-center gap-2 text-slate-200 font-medium">
+                                <i class="fa-solid fa-wave-square text-amber-400"></i> Seismic Wave Pulses
+                            </span>
+                            <input type="checkbox" id="toggle-pulse" checked onchange="togglePulseAnimation()" class="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 bg-slate-900 border-slate-700">
+                        </label>
+                    </div>
+                </div>
+
+
+                <div class="glass-panel p-4 rounded-xl shadow-2xl">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2.5 pb-1.5 border-b border-slate-700/60 flex items-center justify-between">
+                        <span>Tectonic Legend</span>
+                        <i class="fa-solid fa-list text-slate-400"></i>
+                    </h3>
+                    <div class="space-y-2 text-[11px] text-slate-300">
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-0.5 bg-red-500 border-t border-dashed border-red-300"></div>
+                            <span>Philippine Fault Zone (PFZ)</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-0.5 bg-orange-500"></div>
+                            <span>West Valley Fault (WVF)</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-1 bg-sky-500 rounded"></div>
+                            <span>Philippine Trench (Subduction East)</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-1 bg-cyan-400 rounded"></div>
+                            <span>Manila Trench (Subduction West)</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-1 bg-fuchsia-500 rounded"></div>
+                            <span>Cotabato Trench (Subduction South)</span>
+                        </div>
+                        <div class="flex items-center gap-2 pt-1 border-t border-slate-800">
+                            <span class="w-3 h-3 rounded-full bg-rose-500 inline-block ring-2 ring-rose-300"></span>
+                            <span>Historical Major Epicenters</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20 w-11/12 max-w-2xl">
+                <div class="glass-panel p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-2 overflow-x-auto">
+                    <span class="text-xs font-semibold text-slate-300 whitespace-nowrap pl-2 hidden sm:inline-block">
+                        <i class="fa-solid fa-crosshairs text-rose-400"></i> Focus Event:
+                    </span>
+                    <div class="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none w-full sm:w-auto">
+                        <button onclick="focusEarthquake(0)" class="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/80 hover:border-rose-500 border border-slate-700/60 text-xs font-medium whitespace-nowrap transition text-slate-200 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-rose-500"></span> Sarangani M7.8
+                        </button>
+                        <button onclick="focusEarthquake(1)" class="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/80 hover:border-rose-500 border border-slate-700/60 text-xs font-medium whitespace-nowrap transition text-slate-200 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-amber-500"></span> Surigao M6.0
+                        </button>
+                        <button onclick="focusEarthquake(2)" class="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/80 hover:border-rose-500 border border-slate-700/60 text-xs font-medium whitespace-nowrap transition text-slate-200 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-orange-500"></span> Davao Oriental M7.4
+                        </button>
+                        <button onclick="focusEarthquake(3)" class="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/80 hover:border-rose-500 border border-slate-700/60 text-xs font-medium whitespace-nowrap transition text-slate-200 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-yellow-500"></span> Davao Oriental M6.8
+                        </button>
+                        <button onclick="focusEarthquake(4)" class="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/80 hover:border-rose-500 border border-slate-700/60 text-xs font-medium whitespace-nowrap transition text-slate-200 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-red-500"></span> Bogo City M6.9
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ================= VIEW 2: CLASSROOM PRESENTATION ================= -->
+        <div id="view-presentation" class="hidden w-full h-full p-4 md:p-8 overflow-y-auto bg-slate-950">
+            <div class="max-w-5xl mx-auto space-y-6">
+               
+                <!-- Title Card -->
+                <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-rose-500 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                        <span class="text-xs font-bold uppercase tracking-widest text-rose-400">Classroom Challenge Presentation</span>
+                        <h2 class="text-2xl font-bold text-white">Challenge 2: Recent Major Earthquakes of the Philippines</h2>
+                        <p class="text-sm text-slate-400 mt-1">Interactive step-by-step examination of five recent major earthquake epicenters.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="prevStep()" id="prev-btn" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-semibold border border-slate-700 transition flex items-center gap-2">
+                            <i class="fa-solid fa-arrow-left"></i> Previous
+                        </button>
+                        <button onclick="nextStep()" id="next-btn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition flex items-center gap-2 shadow-lg shadow-rose-600/30">
+                            Next Step <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- Slide Content Card -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Left Explanation Side -->
+                    <div class="lg:col-span-1 glass-panel p-6 rounded-2xl flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span id="step-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                                    Step 1 of 5
+                                </span>
+                                <span id="step-date" class="text-xs text-slate-400 font-mono">June 8, 2026</span>
+                            </div>
+
+
+                            <h3 id="step-title" class="text-xl font-bold text-white mb-2">2026 Offshore Sarangani Earthquake</h3>
+                           
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="px-3 py-1 rounded-lg bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-lg">
+                                    M <span id="step-mag">7.8</span>
+                                </div>
+                                <div class="text-xs text-slate-300 space-y-0.5">
+                                    <p><strong>Depth:</strong> <span id="step-depth">33 km</span></p>
+                                    <p><strong>System:</strong> <span id="step-fault">Cotabato Trench / Offshore Sarangani</span></p>
+                                </div>
+                            </div>
+
+
+                            <p id="step-desc" class="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+                                A Mw 7.8 tectonic earthquake located offshore Sarangani, 32 km west of Maasim, Sarangani. PHIVOLCS associated the event with subduction along the Cotabato Trench.
+                            </p>
+                        </div>
+
+
+                        <!-- Mini Step Indicator dots -->
+                        <div class="flex items-center justify-center gap-2 pt-2 border-t border-slate-800">
+                            <div class="step-dot w-2.5 h-2.5 rounded-full bg-rose-500 cursor-pointer" onclick="goToStep(0)"></div>
+                            <div class="step-dot w-2.5 h-2.5 rounded-full bg-slate-700 cursor-pointer" onclick="goToStep(1)"></div>
+                            <div class="step-dot w-2.5 h-2.5 rounded-full bg-slate-700 cursor-pointer" onclick="goToStep(2)"></div>
+                            <div class="step-dot w-2.5 h-2.5 rounded-full bg-slate-700 cursor-pointer" onclick="goToStep(3)"></div>
+                            <div class="step-dot w-2.5 h-2.5 rounded-full bg-slate-700 cursor-pointer" onclick="goToStep(4)"></div>
+                        </div>
+                    </div>
+
+
+                    <!-- Right Focus Map Card -->
+                    <div class="lg:col-span-2 glass-panel p-2 rounded-2xl h-[420px] relative overflow-hidden">
+                        <div id="presentation-map" class="w-full h-full rounded-xl"></div>
+                    </div>
+                </div>
+
+
+                <!-- Structural Tectonic Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="glass-card p-4 rounded-xl border-t-2 border-t-rose-500">
+                        <h4 class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-1">Subduction Zone Trenches</h4>
+                        <p class="text-xs text-slate-300">Major offshore earthquake sources around the archipelago include subduction zones and active crustal faults; the June 2026 Sarangani event was associated with the Cotabato Trench.</p>
+                    </div>
+                    <div class="glass-card p-4 rounded-xl border-t-2 border-t-orange-500">
+                        <h4 class="text-xs font-bold text-orange-400 uppercase tracking-wider mb-1">Philippine Fault Zone (PFZ)</h4>
+                        <p class="text-xs text-slate-300">The Philippine Fault Zone is a major active fault system extending through Luzon, Visayas, and Mindanao and is an important source of crustal earthquakes.</p>
+                    </div>
+                    <div class="glass-card p-4 rounded-xl border-t-2 border-t-sky-500">
+                        <h4 class="text-xs font-bold text-sky-400 uppercase tracking-wider mb-1">Valley Fault System (VFS)</h4>
+                        <p class="text-xs text-slate-300">The Valley Fault System includes the East and West Valley Faults in the Greater Metro Manila area and is an important active fault system.</p>
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+
+
+        <!-- ================= VIEW 3: INTEGRATED CODE DISPLAY ================= -->
+        <div id="view-code" class="hidden w-full h-full flex flex-col bg-slate-950 p-4 md:p-6 overflow-hidden">
+            <div class="max-w-6xl mx-auto w-full h-full flex flex-col glass-panel rounded-2xl overflow-hidden border border-slate-800">
+               
+                <!-- Code Header & File Switcher -->
+                <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-red-500/80 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-yellow-500/80 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-green-500/80 inline-block"></span>
+                        <span class="text-xs font-mono text-slate-400 ml-2">philippine-tectonic-map / source</span>
+                    </div>
+
+
+                    <!-- Code File Tabs -->
+                    <div class="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs font-mono">
+                        <button id="code-tab-html" onclick="showCodeTab('html')" class="px-3 py-1 rounded text-rose-400 font-bold bg-slate-800">index.html</button>
+                        <button id="code-tab-css" onclick="showCodeTab('css')" class="px-3 py-1 rounded text-slate-400 hover:text-white">styles.css</button>
+                        <button id="code-tab-js" onclick="showCodeTab('js')" class="px-3 py-1 rounded text-slate-400 hover:text-white">script.js</button>
+                    </div>
+
+
+                    <button onclick="copyCurrentCode()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 transition flex items-center gap-1.5 border border-slate-700">
+                        <i class="fa-regular fa-copy"></i> Copy Code
+                    </button>
+                </div>
+
+
+                <!-- Code Container -->
+                <div class="flex-1 overflow-auto p-4 bg-slate-950 text-slate-300 font-mono text-xs leading-relaxed code-font select-text">
+                    <pre id="code-display" class="whitespace-pre"></pre>
+                </div>
+            </div>
+        </div>
+
+
+    </main>
+
+
+    <script>
+        /* ================= GEOGRAPHICAL & DATA CONSTANTS ================= */
+        // Exact 5 Major Earthquakes with coordinates and tectonic contexts
+        const EARTHQUAKES_DATA = [
+            {
+                title: "2026 Offshore Sarangani Earthquake",
+                mag: 7.8,
+                lat: 5.59,
+                lng: 125.06,
+                depth: "33 km",
+                date: "June 8, 2026",
+                fault: "Cotabato Trench / Offshore Sarangani",
+                color: "#f43f5e",
+                desc: "A Mw 7.8 tectonic earthquake located offshore Sarangani, approximately 32 km south of Maasim, Sarangani. PHIVOLCS associated the event with the subduction zone of the Cotabato Trench."
+            },
+            {
+                title: "2025 Offshore Surigao del Norte Earthquake",
+                mag: 6.0,
+                lat: 9.69,
+                lng: 126.22,
+                depth: "28 km",
+                date: "October 17, 2025",
+                fault: "Offshore Surigao del Norte",
+                color: "#f59e0b",
+                desc: "A Mw 6.0 tectonic earthquake located about 12 km southeast of General Luna, Surigao del Norte. It was part of a sequence of earthquakes in the offshore Surigao del Norte area."
+            },
+            {
+                title: "2025 Offshore Davao Oriental Earthquake",
+                mag: 7.4,
+                lat: 7.22,
+                lng: 126.97,
+                depth: "23 km",
+                date: "October 10, 2025",
+                fault: "Offshore Davao Oriental",
+                color: "#ea580c",
+                desc: "A Mw 7.4 tectonic earthquake located about 48 km northeast of Manay, Davao Oriental. PHIVOLCS reported strong shaking across parts of Mindanao and expected aftershocks."
+            },
+            {
+                title: "2025 Offshore Davao Oriental Earthquake",
+                mag: 6.8,
+                lat: 7.07,
+                lng: 126.90,
+                depth: "37 km",
+                date: "October 10, 2025",
+                fault: "Offshore Davao Oriental",
+                color: "#eab308",
+                desc: "A Mw 6.8 tectonic earthquake located about 43 km southeast of Manay, Davao Oriental. PHIVOLCS identified it as part of the same October 10, 2025 earthquake sequence."
+            },
+            {
+                title: "2025 Bogo City, Cebu Earthquake",
+                mag: 6.9,
+                lat: 11.10,
+                lng: 124.14,
+                depth: "5 km",
+                date: "September 30, 2025",
+                fault: "Offshore Bogo City, Cebu",
+                color: "#dc2626",
+                desc: "A Mw 6.9 tectonic earthquake located about 19 km north-northeast of Bogo City, Cebu. PHIVOLCS reported maximum instrumental and reported intensities of VII in parts of Cebu."
+            }
+        ];
+
+
+        // Coordinate Paths for Faults & Trenches
+        const TECTONIC_LINES = {
+            philippineFault: [
+                [18.5, 121.2], [17.5, 121.0], [16.2, 121.3], [15.1, 121.4],
+                [14.1, 122.3], [12.5, 123.8], [11.2, 124.7], [9.8, 125.4],
+                [8.2, 125.9], [6.5, 126.1]
+            ],
+            westValleyFault: [
+                [14.85, 121.08], [14.68, 121.10], [14.52, 121.05], [14.32, 121.03]
+            ],
+            philippineTrench: [
+                [15.5, 126.2], [13.2, 125.8], [10.5, 126.6], [8.0, 127.1], [5.5, 127.3]
+            ],
+            manilaTrench: [
+                [20.0, 119.5], [17.8, 119.2], [15.5, 119.3], [13.2, 120.0]
+            ],
+            cotabatoTrench: [
+                [6.2, 123.5], [5.5, 124.2], [5.0, 125.2]
+            ]
+        };
+
+
+        let map, presentationMap;
+        let satelliteOverlay, faultGroup, trenchGroup, quakeGroup;
+        let currentStep = 0;
+        let pulseEnabled = true;
+
+
+        // GIS Image Calibration Bounds matching exact geographical features of satellite base map
+        const IMAGE_BOUNDS = [[4.0, 116.0], [21.5, 127.5]];
+        const SATELLITE_IMG_URL = "cb34362c04defc353b747e70d338b137.jpg";
+
+
+        window.onload = function() {
+            initMainMap();
+            // Lazy initialize presentationMap when tab is clicked to avoid NaN calculations on hidden DOM element
+            updateStepView();
+            loadCodeSnippets();
+        };
+
+
+        // Initialize Main Map
+        function initMainMap() {
+            map = L.map('map', {
+                center: [12.8797, 121.7740],
+                zoom: 6,
+                minZoom: 5,
+                maxZoom: 10,
+                zoomControl: false
+            });
+
+
+            // Re-position zoom control to bottom right
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+
+            // Dark base tile grid layer for surrounding oceans
+            const darkBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 12
+            }).addTo(map);
+
+
+            // High-Resolution Satellite Map Tile Layer (Fallback Base)
+            const esriSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Esri Satellite Relief',
+                maxZoom: 12
+            }).addTo(map);
+
+
+            // High-Resolution Satellite Overlay Calibrated to uploaded image
+            satelliteOverlay = L.imageOverlay(SATELLITE_IMG_URL, IMAGE_BOUNDS, {
+                opacity: 0.92,
+                interactive: false
+            }).addTo(map);
+
+
+            // Fallback error handler if local image file is missing
+            const overlayImg = satelliteOverlay.getElement();
+            if (overlayImg) {
+                overlayImg.onerror = function() {
+                    console.warn("Local image cb34362c04defc353b747e70d338b137.jpg not found in local folder. Defaulting to Esri Satellite Imagery.");
+                    map.removeLayer(satelliteOverlay);
+                };
+            }
+
+
+            // Layer Groups
+            faultGroup = L.layerGroup().addTo(map);
+            trenchGroup = L.layerGroup().addTo(map);
+            quakeGroup = L.layerGroup().addTo(map);
+
+
+            // Draw Structures
+            drawTectonicFeatures(faultGroup, trenchGroup);
+            drawEarthquakes(quakeGroup);
+        }
+
+
+        function drawTectonicFeatures(fGroup, tGroup) {
+            // Philippine Fault Zone (PFZ)
+            L.polyline(TECTONIC_LINES.philippineFault, {
+                color: '#ef4444',
+                weight: 3.5,
+                dashArray: '7, 7',
+                opacity: 0.9
+            }).bindTooltip("Philippine Fault Zone (PFZ)", {sticky: true}).addTo(fGroup);
+
+
+            // West Valley Fault
+            L.polyline(TECTONIC_LINES.westValleyFault, {
+                color: '#f97316',
+                weight: 4,
+                opacity: 0.95
+            }).bindTooltip("West Valley Fault System", {sticky: true}).addTo(fGroup);
+
+
+            // Philippine Trench
+            L.polyline(TECTONIC_LINES.philippineTrench, {
+                color: '#0284c7',
+                weight: 5,
+                opacity: 0.9
+            }).bindTooltip("Philippine Trench (Subduction East)", {sticky: true}).addTo(tGroup);
+
+
+            // Manila Trench
+            L.polyline(TECTONIC_LINES.manilaTrench, {
+                color: '#22d3ee',
+                weight: 5,
+                opacity: 0.9
+            }).bindTooltip("Manila Trench (Subduction West)", {sticky: true}).addTo(tGroup);
+
+
+            // Cotabato Trench
+            L.polyline(TECTONIC_LINES.cotabatoTrench, {
+                color: '#d946ef',
+                weight: 5,
+                opacity: 0.9
+            }).bindTooltip("Cotabato Trench (Subduction South)", {sticky: true}).addTo(tGroup);
+        }
+
+
+        function drawEarthquakes(targetGroup) {
+            EARTHQUAKES_DATA.forEach((eq, index) => {
+                // Size marker proportional to magnitude
+                const radius = (eq.mag - 5.5) * 12;
+
+
+                const markerIcon = L.divIcon({
+                    className: 'custom-quake-icon',
+                    html: `<div class="${pulseEnabled ? 'pulsing-quake-marker' : ''}" style="
+                        width: ${radius}px;
+                        height: ${radius}px;
+                        background-color: ${eq.color};
+                        color: ${eq.color};
+                        border: 2px solid white;
+                        border-radius: 50%;
+                        box-shadow: 0 0 15px ${eq.color};">
+                    </div>`,
+                    iconSize: [radius, radius],
+                    iconAnchor: [radius/2, radius/2]
+                });
+
+
+                const marker = L.marker([eq.lat, eq.lng], { icon: markerIcon }).addTo(targetGroup);
+
+
+                // Popup Template
+                const popupContent = `
+                    <div class="p-2 max-w-xs">
+                        <div class="flex items-center justify-between gap-2 border-b border-slate-700 pb-2 mb-2">
+                            <span class="text-xs font-bold px-2 py-0.5 rounded text-white" style="background-color: ${eq.color}">
+                                M ${eq.mag}
+                            </span>
+                            <span class="text-[10px] text-slate-400 font-mono">${eq.date}</span>
+                        </div>
+                        <h4 class="text-sm font-bold text-white mb-1">${eq.title}</h4>
+                        <div class="text-xs text-slate-300 space-y-1 mb-2">
+                            <p><strong>Coordinates:</strong> ${eq.lat}°N, ${eq.lng}°E</p>
+                            <p><strong>Depth:</strong> ${eq.depth}</p>
+                            <p><strong>System:</strong> <span class="text-sky-300">${eq.fault}</span></p>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-snug bg-slate-900/80 p-2 rounded border border-slate-800">
+                            ${eq.desc}
+                        </p>
+                    </div>
+                `;
+
+
+                marker.bindPopup(popupContent);
+            });
+        }
+
+
+        function toggleSatelliteOverlay() {
+            const checked = document.getElementById('toggle-satellite').checked;
+            if (checked) {
+                satelliteOverlay.addTo(map);
+            } else {
+                map.removeLayer(satelliteOverlay);
+            }
+        }
+
+
+        function toggleFaultsLayer() {
+            const checked = document.getElementById('toggle-faults').checked;
+            if (checked) map.addLayer(faultGroup);
+            else map.removeLayer(faultGroup);
+        }
+
+
+        function toggleTrenchesLayer() {
+            const checked = document.getElementById('toggle-trenches').checked;
+            if (checked) map.addLayer(trenchGroup);
+            else map.removeLayer(trenchGroup);
+        }
+
+
+        function toggleQuakesLayer() {
+            const checked = document.getElementById('toggle-quakes').checked;
+            if (checked) map.addLayer(quakeGroup);
+            else map.removeLayer(quakeGroup);
+        }
+
+
+        function togglePulseAnimation() {
+            pulseEnabled = document.getElementById('toggle-pulse').checked;
+            quakeGroup.clearLayers();
+            drawEarthquakes(quakeGroup);
+        }
+
+
+        function focusEarthquake(index) {
+            const eq = EARTHQUAKES_DATA[index];
+            map.flyTo([eq.lat, eq.lng], 8, { duration: 1.5 });
+        }
+
+
+        function resetMapView() {
+            map.flyTo([12.8797, 121.7740], 6, { duration: 1.2 });
+        }
+
+
+        function initPresentationMap() {
+            if (presentationMap) return;
+
+
+            presentationMap = L.map('presentation-map', {
+                center: [EARTHQUAKES_DATA[currentStep].lat, EARTHQUAKES_DATA[currentStep].lng],
+                zoom: 7,
+                zoomControl: false
+            });
+
+
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '&copy; Esri'
+            }).addTo(presentationMap);
+
+
+            const presOverlay = L.imageOverlay(SATELLITE_IMG_URL, IMAGE_BOUNDS, { opacity: 0.9 }).addTo(presentationMap);
+            const presImg = presOverlay.getElement();
+            if (presImg) {
+                presImg.onerror = function() {
+                    presentationMap.removeLayer(presOverlay);
+                };
+            }
+
+
+            const pFaults = L.layerGroup().addTo(presentationMap);
+            const pTrenches = L.layerGroup().addTo(presentationMap);
+            drawTectonicFeatures(pFaults, pTrenches);
+
+
+            setTimeout(() => {
+                if (presentationMap) presentationMap.invalidateSize();
+            }, 150);
+        }
+
+
+        function updateStepView() {
+            const eq = EARTHQUAKES_DATA[currentStep];
+
+
+            document.getElementById('step-badge').innerText = `Step ${currentStep + 1} of ${EARTHQUAKES_DATA.length}`;
+            document.getElementById('step-date').innerText = eq.date;
+            document.getElementById('step-title').innerText = eq.title;
+            document.getElementById('step-mag').innerText = eq.mag;
+            document.getElementById('step-depth').innerText = eq.depth;
+            document.getElementById('step-fault').innerText = eq.fault;
+            document.getElementById('step-desc').innerText = eq.desc;
+
+
+            // Update dots
+            const dots = document.querySelectorAll('.step-dot');
+            dots.forEach((dot, idx) => {
+                if (idx === currentStep) {
+                    dot.className = "step-dot w-3 h-3 rounded-full bg-rose-500 ring-2 ring-rose-300 cursor-pointer";
+                } else {
+                    dot.className = "step-dot w-2.5 h-2.5 rounded-full bg-slate-700 cursor-pointer";
+                }
+            });
+
+
+            // Update buttons
+            document.getElementById('prev-btn').disabled = (currentStep === 0);
+
+
+            if (presentationMap) {
+                presentationMap.flyTo([eq.lat, eq.lng], 7.5, { duration: 1.2 });
+            }
+        }
+
+
+        function nextStep() {
+            if (currentStep < EARTHQUAKES_DATA.length - 1) {
+                currentStep++;
+            } else {
+                currentStep = 0; // loop back
+            }
+            updateStepView();
+        }
+
+
+        function prevStep() {
+            if (currentStep > 0) {
+                currentStep--;
+                updateStepView();
+            }
+        }
+
+
+        function goToStep(step) {
+            currentStep = step;
+            updateStepView();
+        }
+
+
+        function switchView(viewName) {
+            document.getElementById('view-map').classList.add('hidden');
+            document.getElementById('view-presentation').classList.add('hidden');
+            document.getElementById('view-code').classList.add('hidden');
+
+
+            // Tab styles reset
+            const mapBtn = document.getElementById('tab-map-btn');
+            const presBtn = document.getElementById('tab-presentation-btn');
+            const codeBtn = document.getElementById('tab-code-btn');
+
+
+            [mapBtn, presBtn, codeBtn].forEach(b => {
+                b.className = "px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all duration-200 flex items-center gap-2";
+            });
+
+
+            if (viewName === 'map') {
+                document.getElementById('view-map').classList.remove('hidden');
+                mapBtn.className = "px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 bg-rose-600 text-white shadow-md flex items-center gap-2";
+                setTimeout(() => map.invalidateSize(), 100);
+            } else if (viewName === 'presentation') {
+                document.getElementById('view-presentation').classList.remove('hidden');
+                presBtn.className = "px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 bg-rose-600 text-white shadow-md flex items-center gap-2";
+               
+                if (!presentationMap) {
+                    initPresentationMap();
+                } else {
+                    setTimeout(() => presentationMap.invalidateSize(), 100);
+                }
+            } else if (viewName === 'code') {
+                document.getElementById('view-code').classList.remove('hidden');
+                codeBtn.className = "px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 bg-rose-600 text-white shadow-md flex items-center gap-2";
+            }
+        }
+
+
+        // Embedded code snippets for Tabbed View
+        let currentCodeTab = 'html';
+        const codeSnippets = {
+            html: `<!-- index.html excerpt -->
+<div id="map" class="w-full h-full"></div>
+
+
+<!-- Leaflet GIS Initialization -->
+<script>
+  const bounds = [[4.0, 116.0], [21.5, 127.5]];
+  const map = L.map('map').setView([12.87, 121.77], 6);
+  L.imageOverlay('satellite-relief.jpg', bounds).addTo(map);
+<\/script>`,
+            css: `/* styles.css excerpt */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.33); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}`,
+            js: `// script.js excerpt: Exact Philippine Earthquakes Plotting
+const EARTHQUAKES_DATA = [
+  { title: "2026 Offshore Sarangani", mag: 7.8, lat: 5.59, lng: 125.06, depth: "33 km" },
+  { title: "2025 Offshore Surigao del Norte", mag: 6.0, lat: 9.69, lng: 126.22, depth: "28 km" },
+  { title: "2025 Offshore Davao Oriental", mag: 7.4, lat: 7.22, lng: 126.97, depth: "23 km" },
+  { title: "2025 Offshore Davao Oriental", mag: 6.8, lat: 7.07, lng: 126.90, depth: "37 km" },
+  { title: "2025 Bogo City, Cebu", mag: 6.9, lat: 11.10, lng: 124.14, depth: "5 km" }
+];`
+        };
+
+
+        function showCodeTab(tab) {
+            currentCodeTab = tab;
+            ['html', 'css', 'js'].forEach(t => {
+                const btn = document.getElementById(`code-tab-${t}`);
+                if (t === tab) {
+                    btn.className = "px-3 py-1 rounded text-rose-400 font-bold bg-slate-800";
+                } else {
+                    btn.className = "px-3 py-1 rounded text-slate-400 hover:text-white";
+                }
+            });
+            document.getElementById('code-display').innerText = codeSnippets[tab];
+        }
+
+
+        function loadCodeSnippets() {
+            showCodeTab('html');
+        }
+
+
+        function copyCurrentCode() {
+            const text = codeSnippets[currentCodeTab];
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+
+
+            // Floating feedback box instead of alert()
+            const msgBox = document.createElement("div");
+            msgBox.className = "fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white text-xs px-4 py-2 rounded-xl shadow-2xl z-50 transition-all";
+            msgBox.innerText = `Copied ${currentCodeTab.toUpperCase()} code to clipboard!`;
+            document.body.appendChild(msgBox);
+            setTimeout(() => msgBox.remove(), 2000);
+        }
+    </script>
+</body>
+</html>
